@@ -2,6 +2,7 @@
 //User Editable Configurable Value
 const daysSinceLastActive = 365;
 const archiveWorkspace = 'Enter id of archive workspace';
+const testRun = true; 
 
 //------------------------------------------------------------------------------------------------------------
 //REQUIRED authintication credentials
