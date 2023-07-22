@@ -35,7 +35,7 @@ async function getAndMoveEnterpriseWorkspaces() {
   console.log("Starting to analyze your Enterprise Workspaces");
   const getEnterpriseWorkspaceIDs = `https://api.trello.com/1/enterprises/${enterpriseId}?key=${apiKey}&token=${apiToken}`;
 
-  fs.writeFileSync(`boards_report_${timestamp}.csv`, 'Workspace ID, Board ID, Board Name, Date Last View/Activity, Eligible For Archive\r\n');
+  fs.writeFileSync(`boards_report_${timestamp}.csv`, 'Workspace ID, Board ID, Board Name, Already Closed, Date Last View/Activity, Eligible To Be Closed\r\n');
   fs.writeFileSync(`workspace_report_${timestamp}.csv`, 'Workspace ID, Workspace Name, Member Count, Status\r\n');
 
   const response = await fetchWithTimeout(getEnterpriseWorkspaceIDs, { headers });
@@ -60,10 +60,11 @@ async function getAndMoveEnterpriseWorkspaces() {
     const isDeleted = deletedWorkspaces.includes(organization);
     fs.appendFileSync(`workspace_report_${timestamp}.csv`, [organization, , , isDeleted ? "Deleted" : "Not Deleted"].join(', ') + '\r\n');
   }
+  console.log("All done!")
 }
 
 async function getBoardsOfEnterprise(workspaceId) {
-  console.log(`Getting boards belonging to ${workspaceId}`);
+  console.log(`Getting boards belonging to ${workspaceId} to see which to close/archive.`);
   const getAllBoardsOfEnterprise = `https://api.trello.com/1/organizations/${workspaceId}/boards?key=${apiKey}&token=${apiToken}`;
   
   const response = await fetchWithTimeout(getAllBoardsOfEnterprise, { headers });
@@ -72,36 +73,54 @@ async function getBoardsOfEnterprise(workspaceId) {
   const boardResponse = await response.json();
   for (const board of boardResponse) {
     const daysSinceActive = moment().diff(moment(board.dateLastActivity), 'days');
-    const eligible = daysSinceActive > daysSinceLastActive ? "Yes" : "No";
+    const eligible = ((daysSinceActive > daysSinceLastActive || isNaN(daysSinceActive)) && !board.closed) ? "Yes" : "No";
 
     if (eligible === "Yes") {
+      const closeBoard = `https://api.trello.com/1/boards/${board.id}?closed=true&key=${apiKey}&token=${apiToken}`;
+      const moveResponse = await fetchWithTimeout(closeBoard, { method: 'PUT',
+        headers: headers });
+      console.log(`Closed/Archived ${board.id} board`);
+      if (!moveResponse.ok) throw new Error(`HTTP error - close/archive board! status: ${moveResponse.status}`);
+    }
+    
+    fs.appendFileSync(`boards_report_${timestamp}.csv`, [workspaceId, board.id, board.name, board.closed, daysSinceActive, board.dateLastActivity, eligible].join(', ') + '\r\n');
+  }
+  moveBoardsOfEnterprise(workspaceId);
+}
+
+async function moveBoardsOfEnterprise(workspaceId) {
+  console.log(`Getting boards belonging to ${workspaceId} see all boards are closed and if they should be moved to the Archive Workspace`);
+  const getOpenBoardsOfEnterprise = `https://api.trello.com/1/organizations/${workspaceId}/boards?filter=open&key=${apiKey}&token=${apiToken}`;
+  const openResponse = await fetchWithTimeout(getOpenBoardsOfEnterprise, { headers });
+  const getAllBoardsOfEnterprise = `https://api.trello.com/1/organizations/${workspaceId}/boards?&key=${apiKey}&token=${apiToken}`;
+  const response = await fetchWithTimeout(getAllBoardsOfEnterprise, { headers });
+  if (!openResponse.ok) throw new Error(`HTTP error - get boards of enterprise! status: ${response.status}`);
+  const openBoardResponse = await openResponse.json();
+  const boardResponse = await response.json();
+  if (openBoardResponse.length === 0) {
+  for (const board of boardResponse) {
       const moveBoard = `https://api.trello.com/1/boards/${board.id}?idOrganization=${archiveWorkspace}&key=${apiKey}&token=${apiToken}`;
       const moveResponse = await fetchWithTimeout(moveBoard, { method: 'PUT',
         headers: headers });
       console.log(`Moved ${board.id} board`);
       if (!moveResponse.ok) throw new Error(`HTTP error - move board! status: ${moveResponse.status}`);
-    }
-    
-    fs.appendFileSync(`boards_report_${timestamp}.csv`, [workspaceId, board.id, board.name, daysSinceActive, board.dateLastActivity, eligible].join(', ') + '\r\n');
   }
-  console.log("All done!")
+} 
 }
 
 async function checkIfWorkspaceEmpty(workspaceId) {
   console.log(`Checking if ${workspaceId} is empty`);
-  const getAllBoardsOfWorkspace = `https://api.trello.com/1/organizations/${workspaceId}/boards?key=${apiKey}&token=${apiToken}`;
+  const getOpenBoardsOfWorkspace = `https://api.trello.com/1/organizations/${workspaceId}/boards?filter=open&key=${apiKey}&token=${apiToken}`;
   
-  const response = await fetchWithTimeout(getAllBoardsOfWorkspace, { headers });
-  if (!response.ok) throw new Error(`HTTP error - get boards of workspace! status: ${response.status}`);
+  const response = await fetchWithTimeout(getOpenBoardsOfWorkspace, { headers });
+  if (!response.ok) throw new Error(`HTTP error - get open oards of workspace! status: ${response.status}`);
   
   const boardResponse = await response.json();
   const deleteWorkspace = `https://api.trello.com/1/organizations/${workspaceId}?key=${apiKey}&token=${apiToken}`;
-  //console.log(deleteWorkspace)
-  if (boardResponse.length === 0) {
+  if (boardResponse.length === 0 && workspaceId != archiveWorkspace) {
     const deleteResponse = await fetchWithTimeout(deleteWorkspace, { 
       method: 'Delete',
       headers: headers });
-    //console.log(deleteResponse)
     if (!deleteResponse.ok) throw new Error(`HTTP error - deleting board! status: ${deleteResponse.status}`);
     console.log(`${workspaceId} has been deleted.`);
     return true;  // Workspace was deleted.
