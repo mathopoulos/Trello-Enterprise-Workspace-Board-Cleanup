@@ -3,6 +3,7 @@
 const daysSinceLastActive = 365;
 const archiveWorkspace = 'Enter id of archive workspace';
 const testRun = true; 
+const deleteEmptyWorkspaces = true; 
 
 //------------------------------------------------------------------------------------------------------------
 //REQUIRED authintication credentials
@@ -52,10 +53,11 @@ async function getAndMoveEnterpriseWorkspaces() {
 
   const deletedWorkspaces = [];
   for (const organization of workspaceResponse) {
+    if (deleteEmptyWorkspaces === true) {
     const isDeleted = await checkIfWorkspaceEmpty(organization);
     if (isDeleted) {
       deletedWorkspaces.push(organization);
-    }
+    }}
   }
 
   for (const organization of workspaceResponse) {
@@ -103,7 +105,7 @@ async function moveBoardsOfEnterprise(workspaceId) {
   if (openBoardResponse.length === 0) {
   for (const board of boardResponse) {
       const moveBoard = `https://api.trello.com/1/boards/${board.id}?idOrganization=${archiveWorkspace}&key=${apiKey}&token=${apiToken}`;
-      if (testRun == false){
+      if (testRun === false){
       const moveResponse = await fetchWithTimeout(moveBoard, { method: 'PUT',
         headers: headers });
       if (!moveResponse.ok) throw new Error(`HTTP error - move board! status: ${moveResponse.status}`);};
@@ -122,7 +124,7 @@ async function checkIfWorkspaceEmpty(workspaceId) {
   const boardResponse = await response.json();
   const deleteWorkspace = `https://api.trello.com/1/organizations/${workspaceId}?key=${apiKey}&token=${apiToken}`;
   if (boardResponse.length === 0 && workspaceId != archiveWorkspace) {
-    if (testRun = false){
+    if (testRun === false){
     const deleteResponse = await fetchWithTimeout(deleteWorkspace, { 
       method: 'Delete',
       headers: headers });
