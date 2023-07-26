@@ -16,7 +16,6 @@ const enterpriseId = 'Enterprise ID'; //Enter the ID of the Trello Enterprise yo
 //------------------------------------------------------------------------------------------------------------
 //Below this line is the main execution code. Edits below this line are not recommended unless you are trying to adapt the core funtionality of the script.
 
-
 const fetch = require('node-fetch');
 const moment = require('moment');
 const fs = require('fs');
@@ -53,11 +52,10 @@ async function getAndMoveEnterpriseWorkspaces() {
 
   const deletedWorkspaces = [];
   for (const organization of workspaceResponse) {
-    if (deleteEmptyWorkspaces === true) {
     const isDeleted = await checkIfWorkspaceEmpty(organization);
     if (isDeleted) {
       deletedWorkspaces.push(organization);
-    }}
+    }
   }
 
   for (const organization of workspaceResponse) {
@@ -123,7 +121,7 @@ async function checkIfWorkspaceEmpty(workspaceId) {
   
   const boardResponse = await response.json();
   const deleteWorkspace = `https://api.trello.com/1/organizations/${workspaceId}?key=${apiKey}&token=${apiToken}`;
-  if (boardResponse.length === 0 && workspaceId != archiveWorkspace) {
+  if (boardResponse.length === 0 && workspaceId != archiveWorkspace && deleteEmptyWorkspaces === true ) {
     if (testRun === false){
     const deleteResponse = await fetchWithTimeout(deleteWorkspace, { 
       method: 'Delete',
@@ -136,4 +134,3 @@ async function checkIfWorkspaceEmpty(workspaceId) {
 }
 
 getAndMoveEnterpriseWorkspaces();
-
