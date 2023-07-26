@@ -1,9 +1,10 @@
 //------------------------------------------------------------------------------------------------------------
 //User Editable Configurable Value
-const daysSinceLastActive = 365;
-const archiveWorkspace = 'Enter id of archive workspace';
-const testRun = true; 
-const deleteEmptyWorkspaces = true; 
+const closeMoveInactiveBoards = true; // If this is set to true then boards that have not been active in the last X days will be closed/archived. If all the boards in a Workpace are closed then those boards will be moved to the Archive workspace.
+const deleteEmptyWorkspaces = false; // If this is set to true then workspaces with no boards will be deleted.
+const daysSinceLastActive = 365; // If a board has not been in the last X days then the board will be closed/archived. Note that this value only matters if closeInactiveBoards is set to true
+const archiveWorkspace = 'Workspace ID'; // If deleteEmptyWorkspaces is set to true then workspaces that only have closed boards will have their boards moved to this workspace and then be deleted
+const testRun = true; // If this is set to true then no boards will actually be closed and no workspaces will be closed. 
 
 //------------------------------------------------------------------------------------------------------------
 //REQUIRED authintication credentials
@@ -23,6 +24,7 @@ const headers = { 'Accept': 'application/json' };
 const timestamp = moment().format("YYYY-MM-DD-HHmmss");
 
 
+// Function that fetch's API but with a timeout
 async function fetchWithTimeout(resource, options) {
   const { timeout = 50000 } = options;
   const controller = new AbortController();
@@ -32,24 +34,32 @@ async function fetchWithTimeout(resource, options) {
   return response;
 }
 
+
+// Function to actually look through boards and close/archive those that are not active in the last X days. 
 async function getAndMoveEnterpriseWorkspaces() {
+  // Tells user that script is starting
   if (testRun == true) {console.log("TEST RUN MODE - Starting to analyze your Enterprise Workspaces")};
   console.log("Starting to analyze your Enterprise Workspaces");
+
+  // URL for getting Enterprise's Workspace IDs
   const getEnterpriseWorkspaceIDs = `https://api.trello.com/1/enterprises/${enterpriseId}?key=${apiKey}&token=${apiToken}`;
 
+  // Creates report files
   fs.writeFileSync(`boards_report_${timestamp}.csv`, 'Workspace ID, Board ID, Board Name, Already Closed, Date Last View/Activity, Eligible To Be Closed\r\n');
-  fs.writeFileSync(`workspace_report_${timestamp}.csv`, 'Workspace ID, Workspace Name, Member Count, Status\r\n');
+  fs.writeFileSync(`workspace_report_${timestamp}.csv`, 'Workspace ID, Status\r\n');
 
+  // Call to get Workspace IDs
   const response = await fetchWithTimeout(getEnterpriseWorkspaceIDs, { headers });
   if (!response.ok) throw new Error(`HTTP error - get enterprise workspaces! status: ${response.status}`);
-  
   const body = await response.json();
   const workspaceResponse = body.idOrganizations;
 
+  // Loops through and gets all boards of each Workspace
   for (const organization of workspaceResponse) {
     await getBoardsOfEnterprise(organization);
   }
 
+  // 
   const deletedWorkspaces = [];
   for (const organization of workspaceResponse) {
     const isDeleted = await checkIfWorkspaceEmpty(organization);
@@ -58,13 +68,15 @@ async function getAndMoveEnterpriseWorkspaces() {
     }
   }
 
+  // Adds Deleted Workspaces in Report
   for (const organization of workspaceResponse) {
     const isDeleted = deletedWorkspaces.includes(organization);
-    fs.appendFileSync(`workspace_report_${timestamp}.csv`, [organization, , , isDeleted ? "Deleted" : "Not Deleted"].join(', ') + '\r\n');
+    fs.appendFileSync(`workspace_report_${timestamp}.csv`, [organization, isDeleted ? "Deleted" : "Not Deleted"].join(', ') + '\r\n');
   }
   console.log("All done!")
 }
 
+// Function that gets boards of a particular workspaces and closes/archives the ones that are not active in the last X days. 
 async function getBoardsOfEnterprise(workspaceId) {
   console.log(`Getting boards belonging to ${workspaceId} to see which to close/archive.`);
   const getAllBoardsOfEnterprise = `https://api.trello.com/1/organizations/${workspaceId}/boards?key=${apiKey}&token=${apiToken}`;
@@ -78,19 +90,23 @@ async function getBoardsOfEnterprise(workspaceId) {
     const eligible = ((daysSinceActive > daysSinceLastActive || isNaN(daysSinceActive)) && !board.closed) ? "Yes" : "No";
 
     if (eligible === "Yes") {
+      if (closeMoveInactiveBoards === true){
       const closeBoard = `https://api.trello.com/1/boards/${board.id}?closed=true&key=${apiKey}&token=${apiToken}`;
       if (testRun == false){
       const moveResponse = await fetchWithTimeout(closeBoard, { method: 'PUT',
         headers: headers })
-      if (!moveResponse.ok) throw new Error(`HTTP error - close/archive board! status: ${moveResponse.status}`);;}
+      if (!moveResponse.ok) throw new Error(`HTTP error - close/archive board! status: ${moveResponse.status}`);;}}
       console.log(`Closed/Archived ${board.id} board`);
     }
     
     fs.appendFileSync(`boards_report_${timestamp}.csv`, [workspaceId, board.id, board.name, board.closed, daysSinceActive, board.dateLastActivity, eligible].join(', ') + '\r\n');
   }
-  moveBoardsOfEnterprise(workspaceId);
+  if (closeMoveInactiveBoards === true){
+  await moveBoardsOfEnterprise(workspaceId);}
 }
 
+
+// Function that moves closed boards of a particular Workspace 
 async function moveBoardsOfEnterprise(workspaceId) {
   console.log(`Getting boards belonging to ${workspaceId} see all boards are closed and if they should be moved to the Archive Workspace`);
   const getOpenBoardsOfEnterprise = `https://api.trello.com/1/organizations/${workspaceId}/boards?filter=open&key=${apiKey}&token=${apiToken}`;
@@ -112,7 +128,9 @@ async function moveBoardsOfEnterprise(workspaceId) {
 } 
 }
 
+// Function to check if a Workspace is empty (has no boards) and delete it if it is empty
 async function checkIfWorkspaceEmpty(workspaceId) {
+  if (deleteEmptyWorkspaces === true) {
   console.log(`Checking if ${workspaceId} is empty`);
   const getOpenBoardsOfWorkspace = `https://api.trello.com/1/organizations/${workspaceId}/boards?filter=open&key=${apiKey}&token=${apiToken}`;
   
@@ -128,9 +146,10 @@ async function checkIfWorkspaceEmpty(workspaceId) {
       headers: headers });
     if (!deleteResponse.ok) throw new Error(`HTTP error - deleting board! status: ${deleteResponse.status}`);};
     console.log(`${workspaceId} has been deleted.`);
-    return true;  // Workspace was deleted.
+    return true;  // Workspace was deleted (if not in Test Mode)
   }
   return false;  // Workspace was not deleted.
-}
+}}
 
+// Runs script 1 time at start
 getAndMoveEnterpriseWorkspaces();
