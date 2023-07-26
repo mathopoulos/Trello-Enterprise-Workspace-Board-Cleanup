@@ -117,7 +117,7 @@ async function checkIfWorkspaceEmpty(workspaceId) {
   const getOpenBoardsOfWorkspace = `https://api.trello.com/1/organizations/${workspaceId}/boards?filter=open&key=${apiKey}&token=${apiToken}`;
   
   const response = await fetchWithTimeout(getOpenBoardsOfWorkspace, { headers });
-  if (!response.ok) throw new Error(`HTTP error - get open oards of workspace! status: ${response.status}`);
+  if (!response.ok) throw new Error(`HTTP error - get open boards of workspace! status: ${response.status}`);
   
   const boardResponse = await response.json();
   const deleteWorkspace = `https://api.trello.com/1/organizations/${workspaceId}?key=${apiKey}&token=${apiToken}`;
