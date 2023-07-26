@@ -10,10 +10,13 @@ There are 3 variables that the user must input for the script to work:
 - **Enterprise ID** - This is the ID of the Enterprise that the user would like to run the script against. See the [Trello API documentation](https://developer.atlassian.com/cloud/trello/guides/rest-api/api-introduction/)
  
 In addition there below are a few customizations you can make if you would like. 
+- **closeMoveInactiveBoards** - If this is set to true then boards that have not been active in the last X days will be closed/archived. If all the boards in a Workpace are closed then those boards will be moved to the Archive workspace.
+- **deleteEmptyWorkspaces** - This is a boolean that if set to true will look through Workspaces and if they only have closed boards, move all those boards to the archive workspace and then delete that empty workspace.
 - **daysSinceLastActive** - This variable defines how you want to define activity and will impact which users will get deactivated from the Enterprise. If a user has not been active in the last X days (aka X days or more) then they will be deactivated. This will remove them from all Enterprise Workspaces and take away their Enterprise seat.
 - **archiveWorkspace** - This is the id of the workspace you would like to move closed/archived boards too. Only boards that that are in a workspace with no open/active boards will be moved. 
 - **testRun** - This is a boolean that if set to true will run the script in test mode. In test mode, no boards will be closed and no workspaces will be deleted.
-- - **deleteEmptyWorkspaces** - This is a boolean that if set to true will look through Workspaces and if they only have closed boards, move all those boards to the archive workspace and then delete that empty workspace. 
+
+
 
 
 
