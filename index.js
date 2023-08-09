@@ -23,7 +23,6 @@ const fs = require('fs');
 const headers = { 'Accept': 'application/json' };
 const timestamp = moment().format("YYYY-MM-DD-HHmmss");
 
-
 // Function that fetch's API but with a timeout
 async function fetchWithTimeout(resource, options) {
   const { timeout = 50000 } = options;
@@ -105,34 +104,61 @@ async function getBoardsOfEnterprise(workspaceId) {
   await moveBoardsOfEnterprise(workspaceId);}
 }
 
-
 // Function that moves closed boards of a particular Workspace 
 async function moveBoardsOfEnterprise(workspaceId) {
   console.log(`Getting boards belonging to ${workspaceId} see all boards are closed and if they should be moved to the Archive Workspace`);
   const getOpenBoardsOfEnterprise = `https://api.trello.com/1/organizations/${workspaceId}/boards?filter=open&key=${apiKey}&token=${apiToken}`;
-  const openResponse = await fetchWithTimeout(getOpenBoardsOfEnterprise, { headers });
-  const getAllBoardsOfEnterprise = `https://api.trello.com/1/organizations/${workspaceId}/boards?&key=${apiKey}&token=${apiToken}`;
-  const response = await fetchWithTimeout(getAllBoardsOfEnterprise, { headers });
-  if (!openResponse.ok) throw new Error(`HTTP error - get boards of enterprise! status: ${response.status}`);
-  const openBoardResponse = await openResponse.json();
-  const boardResponse = await response.json();
-  if (openBoardResponse.length === 0) {
-  for (const board of boardResponse) {
-      const moveBoard = `https://api.trello.com/1/boards/${board.id}?idOrganization=${archiveWorkspace}&key=${apiKey}&token=${apiToken}`;
-      if (testRun === false){
-      const moveResponse = await fetchWithTimeout(moveBoard, { method: 'PUT',
-        headers: headers });
-      if (!moveResponse.ok) throw new Error(`HTTP error - move board! status: ${moveResponse.status}`);};
-      console.log(`Moved ${board.id} board`);
+  
+  try {
+    const openResponse = await fetchWithTimeout(getOpenBoardsOfEnterprise, { headers });
+    if (!openResponse.ok) {
+      console.error(`HTTP error - get open boards of enterprise! status: ${openResponse.status}`);
+      return; // Skip the rest of the function if an HTTP error occurs
+    }
+    
+    const openBoardResponse = await openResponse.json();
+
+    const getAllBoardsOfEnterprise = `https://api.trello.com/1/organizations/${workspaceId}/boards?&key=${apiKey}&token=${apiToken}`;
+    const response = await fetchWithTimeout(getAllBoardsOfEnterprise, { headers });
+
+    if (!response.ok) {
+      console.error(`HTTP error - get boards of enterprise! status: ${response.status}`);
+      return; // Skip the rest of the function if an HTTP error occurs
+    }
+    
+    const boardResponse = await response.json();
+    
+    if (openBoardResponse.length === 0) {
+      for (const board of boardResponse) {
+        const moveBoard = `https://api.trello.com/1/boards/${board.id}?idOrganization=${archiveWorkspace}&key=${apiKey}&token=${apiToken}`;
+        if (testRun === false && (workspaceId !== '5f468a6af0cf010cb30f748c' || workspaceId !== '5f490dc45da1077aee4488a6')) {
+          try {
+            const moveResponse = await fetchWithTimeout(moveBoard, { method: 'PUT', headers: headers });
+            if (!moveResponse.ok) {
+              console.error(`HTTP error - move board! status: ${moveResponse.status}`);
+              continue; // Skip to the next iteration if an HTTP error occurs
+            }
+            console.log(`Moved ${board.id} board`);
+          } catch (error) {
+            console.error(`An error occurred during board move: ${error}`);
+            continue; // Skip to the next iteration on error
+          }
+        } else {
+          console.log(`Test run: Moved ${board.id} board`);
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`An error occurred during board retrieval: ${error}`);
   }
-} 
 }
+
 
 // Function to check if a Workspace is empty (has no boards) and delete it if it is empty
 async function checkIfWorkspaceEmpty(workspaceId) {
   if (deleteEmptyWorkspaces === true) {
   console.log(`Checking if ${workspaceId} is empty`);
-  const getOpenBoardsOfWorkspace = `https://api.trello.com/1/organizations/${workspaceId}/boards?filter=open&key=${apiKey}&token=${apiToken}`;
+  const getOpenBoardsOfWorkspace = `https://api.trello.com/1/organizations/${workspaceId}/boards?filter=all&key=${apiKey}&token=${apiToken}`;
   
   const response = await fetchWithTimeout(getOpenBoardsOfWorkspace, { headers });
   if (!response.ok) throw new Error(`HTTP error - get open boards of workspace! status: ${response.status}`);
